@@ -1,0 +1,403 @@
+
+
+# ----------------------------------------- Import module ---------------------------------------- #
+#region
+from tkinter import ttk
+from cf_units import decode_time
+# from matplotlib.lines import _LineStyle
+import pandas as pd
+import matplotlib
+import numpy as np
+import os
+import scipy.stats as sst
+from scipy.optimize import curve_fit
+from sklearn.metrics import r2_score
+from sklearn.decomposition import PCA
+from sklearn.utils import check_random_state
+import matplotlib.dates as mdates
+import datetime as dt
+import xarray as xr
+from matplotlib.image import imread
+import cfgrib
+import itertools
+from cdo import *
+from typing import Union, Optional, List, Tuple, Dict, Literal
+from my_junk import *
+
+cdo = Cdo()
+#This prohibits that existing files are created a second time
+cdo.forceOutput = False
+
+#endregion
+# ----------------------- Import plot module ----------------------- #
+#region
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import matplotlib.pyplot as plt
+from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
+from cartopy.io.shapereader import Reader
+from cartopy.feature import ShapelyFeature
+# import metpy.calc as mpcalc
+# from metpy.units import units
+import shapefile as shp
+from scipy.ndimage import gaussian_filter
+from matplotlib.animation import FuncAnimation
+import matplotlib.lines as mlines
+import matplotlib.cm as cm
+from matplotlib.colors import Normalize
+from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
+from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+from matplotlib.cm import ScalarMappable
+import geopandas as gpd
+from shapely.geometry import MultiPolygon
+
+params = {
+    'axes.titlesize': 25,
+    'axes.labelsize': 25,
+    'font.size': 20,
+    'font.family': 'serif',
+    'legend.fontsize': 20,
+    'legend.loc': 'upper right',
+    'legend.labelspacing': 0.25,
+    'xtick.labelsize': 20,
+    'ytick.labelsize': 20,
+    'lines.linewidth': 3,
+    'text.usetex': False,
+    # 'figure.autolayout': True,
+    'ytick.right': True,
+    'xtick.top': True,
+
+    'figure.figsize': [12, 10],  # instead of 4.5, 4.5
+    'axes.linewidth': 1.5,
+    'xtick.major.size': 15,
+    'ytick.major.size': 15,
+    'xtick.minor.size': 5,
+    'ytick.minor.size': 5,
+
+    'xtick.major.width': 5,
+    'ytick.major.width': 5,
+    'xtick.minor.width': 3,
+    'ytick.minor.width': 3,
+
+    'xtick.major.pad': 10,
+    'ytick.major.pad': 12,
+    # 'xtick.minor.pad': 14,
+    # 'ytick.minor.pad': 14,
+
+    'xtick.direction': 'inout',
+    'ytick.direction': 'inout',
+}
+plt.clf()
+matplotlib.rcParams.update(params)
+#endregion
+
+# --------------------- Data path and constant --------------------- #
+#region
+Data_wd = "/data/projects/REMOSAT/tamnnm/"
+Code_wd= "/work/users/tamnnm/code/main_code/city_list_obs/"
+Data_grid = Data_wd+"wrf_data/gribfile/synop_file/"
+Data_nc  = Data_wd+"wrf_data/netcdf/para"
+Data_raw_2019 = Data_wd+"dat_daily_1961_2019/"
+Data_nc_2019 = Data_wd+"UPDATE_METEO/"
+Data_obs_list = Code_wd+"city/"
+Data_obs_pts=Code_wd+"city_pts/"
+suffix_2019 = '_1961_2019.txt'
+os.chdir(Data_nc)
+#Data_2023 = Data_wd+"dat_daily_1961_2021"
+indice={'167':{'min':('Txn','Tn10p'), 'max':('Txx','Tx90p'),'other':('DTR')},
+        '228':('CDD','CWD','R10mm','R20mm','R50mm','R1mm','Rx1day','Rx5day','SDII','Prcptot','Rptot','Rpday')}
+pctl=('90p','95p','10p','99p')
+param = {'uwnd': 165,
+         'vwnd': 166,
+         'min': 167,
+         'max': 167,
+         'tp': 288
+         }
+#endregion
+
+# ------------------------- optional choice ------------------------ #
+option = "else"
+# "time" = plot timeseries
+# "indices" = calculate the indices
+
+
+# ------------------------ reanlysis indices ----------------------- #
+def check_exist(name):
+    return True if os.path.exists(name) else False
+
+
+def gen_base(dataset:Optional[Literal["cera","era","era5","noaa","obs"]],var:Optional[Literal['uwnd','vwnd','tp','min','max']],start:Optional[int],end:Optional[int],percentile:list = None,window='5'):
+    #create base file
+    var_no=param[var]
+    fol=f'para_{var_no}/'
+
+    # input file, special case for temp
+    ifile=f'{dataset}_{var_no}.nc' if var_no != 167 else f'{var}_{dataset}_{var_no}.nc'
+
+    # output file, base period
+    ofile='b_'+ifile
+
+    if os.path.exist(ofile):
+        time_range=f'{start-1}-12-30,{end}-01-02'
+        if var_no==228 and dataset != "obs":
+            cdo.seldate(time_range,input=f'-setctomiss 0 -mul {ifile} -gec,1 {ifile}',output=fol+ofile,options='L')
+        else:
+            cdo.selyear(time_range,input=ifile,output=ofile,options='L')
+        if var in param['extreme'].keys():
+            if percentile:
+                ibfile=fol+ofile
+                # n-window running percentile of base value
+                for rp in percentile:
+                    pfile=fol+f'b{rp}p_{ifile}'
+                    pminfile=fol+f'b{rp}p_min_{ifile}'
+                    pmaxfile=fol+f'b{rp}p_max_{ifile}'
+                    if not check_exist(pfile):
+                        if not check_exist(pminfile): cdo.ydrunmin(window,input=ifile,output= pminfile)
+                        if not check_exist(pmaxfile): cdo.ydrunmax(window,input=ifile,output= pmaxfile)
+                        cdo.seldate(f'{start}/{end}', input=f'-ydrunpctl {rp},{window},pm=r8 {ibfile} {pminfile} {pmaxfile}',output=pfile)
+    return
+
+
+def get_name_files(dataset,var=None,ind=None,type_ind: Optional[Literal['min','max']] =None, base: bool=False, percentile: Optional[str] = None, window: Optional[int] = 5):
+    if ind is not None:
+    var_no=next(var_no for var_no in list(indice.keys()) if ind in indice[var_no])
+    fol = f'para_{var_no}/'
+    def get_name(fol,dataset,var_no,type_ind=None, base: bool=False, percentile: Optional[str] = None):
+        ifile= fol + f'{dataset}_{var_no}.nc' if type_ind is None else fol + f'{type_ind}_{dataset}_{var_no}.nc'
+        if base is True:
+            ibfile=fol+f'b_{ifile}'
+    if ind in indice[var_no]['other']:
+        return fol,fol + f'min_{dataset}_{var_no}.nc', fol + f'max_{dataset}_{var_no}.nc'
+    elif ind in indice[var_no]['min']:
+        return fol,fol + f'min_{dataset}_{var_no}.nc', None
+    elif ind in indice[var_no]['max']:
+        return fol,fol + f'max_{dataset}_{var_no}.nc', None
+    else:
+        return fol,fol + f'{dataset}_{var_no}.nc', None
+
+
+class gen_ind:
+    def __init__(self):
+        self.ifile = None
+    def __call__(self,ind,dataset):
+        self.ind = ind
+        self.dataset = dataset
+        self.fol,self.iminfile,self.imaxfile=get_ifiles(ind,dataset)
+        self.ifile=self.iminfile or self.imaxfile
+        self.ofile = f'indices/{ind}_{dataset}.nc'
+
+        # base percentile file
+        if ind=="wsdi":
+            pctl_ind='90p'
+        elif ind=="csdi":
+            pctl_ind='10p'
+        else:
+            # T10p, T90p,R99p, R95p
+            pctl_ind = next((value for value in pctl if value in ind),None)
+        if pctl_ind is not None:
+            self.ibfile=self.fol+f'b{pctl_ind}p'
+
+
+    def gen_con_day(self):
+        if self.ind=="cdd": method='ltc'
+        if self.ind=="cwd": method='gec'
+        if not check_exist(self.ofile): cdo.yearmax(input=f'-consects -{method},1 {self.ifile}',output=self.ofile)
+    def gen_compare_thres(self,method,thres=1):
+        # Rnmm ,SU25, TN20
+        if 'R' in self.ind:
+            method='gec'
+            thres=self.ind[1:3]
+        else:
+            thres=self.ind[2:4]
+            if 'SU' in self.ind: method='gtc'
+            if 'TN' in self.ind: method='ltc'
+        if not check_exist(self.ofile): cdo.yearsum(input=f'-{method},{thres} {self.ifile}',output=self.ofile)
+    def gen_rx1day(self):
+        if not check_exist(self.ofile): cdo.monmax(input=f'{self.ifile}',output=self.ofile)
+    def gen_rxnday(self,n=5):
+        if not check_exist(self.ofile): cdo.monmax(input=f'-runsum,{n} {self.ifile}',output=self.ofile)
+    def gen_sdii(self): # fix this
+        if not check_exist(self.ofile): cdo.yearmean(input=f'{self.ifile}',output=self.ofile)
+    def gen_prcptot(self,thres=1):
+        if not check_exist(self.ofile): cdo.yearsum(input=f'-mul {self.ifile} -gec,{thres} {self.ifile}',output=self.ofile)
+    def gen_compare_rptot(self):
+        if 'R' in self.ind: percentile=self.ind[1:3]
+        elif 'T' in self.ind: percentile=self.ind[2:4]
+        else: pass
+        method="ltc" if int(percentile) < 50 else "gtc"
+        if not check_exist(self.ofile): cdo.yearsum(input=f'-mul {self.ifile} -{method},0 -sub {self.ifile} {self.ibfile}',output=self.ofile)
+    def gen_compare_pctlday(self):
+        if 'R' in self.ind: percentile=self.ind[1:3]
+        elif 'T' in self.ind: percentile=self.ind[2:4]
+        else: pass
+        method="ltc" if int(percentile) < 50 else "gtc"
+        if not check_exist(self.ofile): cdo.yearsum(input=f'-{method},0 -sub {self.ifile} {self.ibfile}',output=self.ofile)
+    def gen_min(self):
+        if not check_exist(self.ofile): cdo.monmax(input=self.ifile,output=self.ofile)
+    def gen_max(self):
+        if not check_exist(self.ofile): cdo.monmin(input=self.ifile,output=self.ofile)
+    def gen_dtr(self):
+        if not check_exist(self.ofile): cdo.monmean(input=f'-sub {self.imaxfile} {self.iminfile}',output=self.ofile)
+    def gen_temp_si(self):
+        method="ltc" if self.ind=="csdi" else "gtc"
+        if not check_exist(self.ofile): cdo.yearsum(input=f'-gec,6 -consects -{method},0 -sub {self.ifile} {self.ibfile}',output=self.ofile)
+
+
+
+
+
+# ---------------------- Present station data ---------------------- #
+txt_file = Data_2019+"T2m_HANOI"+suffix_2019
+with open(txt_file, 'r') as f:
+    station = f.read()
+    # Split file in to a list a row
+    lines = station.split("\n")
+    no_lines = len(lines)
+    no_years = round((no_lines-2)/32)
+    city_name = lines[0][:]
+    lat_city = float(lines[1][1])
+    lon_city = float(lines[1][0])
+    f.close()
+
+# Data structure:
+# Line%32=0 is the year
+# columns: 12 months - rows: 31 days
+# Nan value heres is -99.99
+
+# ---- transform line into list and cut off the 2 beginning line --- #
+rdata_row = []
+rdata_clean = []  # line without the day number, only the data
+rdata_flat = []  # all data is flattened to put into dataframe
+
+for i, line in enumerate(lines[2:]):
+    temp_line = [float(x) for x in line.split()]
+    rdata_row.append(temp_line)
+    if i % 32 != 0:
+        rdata_clean.append(temp_line[1:])
+        del temp_line
+    else:
+        del temp_line
+        continue
+
+rdata_flat = list(itertools.chain(*rdata_clean))
+print(len(rdata_flat))
+
+# ------------- format the date -> only show the years ------------- #
+
+year_start = int(rdata_row[0][0])
+year_end = year_start+no_years-1
+date_start = f'{year_start}-01-01'
+date_end = f'{year_end}-12-31'
+
+# Method 1
+# start = dt.datetime.strptime(f'{year_start}-01-01', "%Y-%m-%d")
+# end = dt.datetime.strptime(f'{year_end}-12-31', "%Y-%m-%d")
+# date_generated = [
+#    start + dt.datetime.timedelta(days=x) for x in range(0, (end-start).days)]
+
+# Method 2
+date_generated = pd.date_range(  # pd.Series(pd.date_range(
+    start=date_start, end=date_end, freq='D')
+print(date_generated)
+
+# You can also use pd.date_range then put it in a dataframe
+
+
+# --------------------- Call for array and list -------------------- #
+# 228: Tp
+# 165: u wind
+# 166: v wind
+# 167: 2m temperature
+# 168: 2m dewpoint temperature
+
+
+# -------------------- Open grib and netcdf file ------------------- #
+# for file in os.listdir(Data_grid)
+# for para in param_no:
+#    for file in os.listdir(Data_grid):
+ds = xr.open_dataset(f'{Data_grid+"era5_167.grib"}',
+                     engine="cfgrib")
+# If you want to add more hours,you should create a new time dimension
+reference_date = '1940-01-01 07:00:00.0'
+ds['time'] = pd.date_range(
+    start=reference_date, periods=ds.sizes['time'], freq="2H")
+
+# Posible error
+# Allocate not enough: your time range is large, it cannot convert
+# Numpy Array: If you just convert the time to dataframe, it cannot be offseprint(ds)
+
+# ------------------ Find all the 4 closest points ----------------- #
+with open(Data_wd+"euler_pts.txt", 'r') as f:
+    station = f.readlines()
+    lines = pd.DataFrame(station)
+    f.close()
+
+# --------- combine the grid and insitu data into dataframe --------- #
+gdata_all = []  # all gridded data
+gdata_avg = []  # average of gridded data
+for i, line in enumerate(lines):
+    if city_name in line:
+        euler_pts = line.strip().split(',')[1:]
+        for i in np.range(0, len(euler_pts), 2):
+            lat_pts = euler_pts[i]
+            lon_pts = euler_pts[i+1]
+            gdata_val = ds.sel(longitude=lon_pts, latitude=lat_pts,
+                               time=slice(date_start, date_end))
+            gdata_daily = gdata_val["t2m"].resample(time="1D").mean()
+            # resample will interpolate anymissing date
+            gdata_all.append(gdata_all)
+        gdata_avg = np.mean(gdata_all, axis=0)
+        # axis 0: verticle
+        # axis 1: horizontal
+        if len(gdata_avg) == len(rdata_flat):
+            all_data = pd.DataFrame(
+                rdata_flat+gdata_avg).replace("-99.99", np.NaN)
+            # transpose so that each nested list become a column
+            all_data.T
+            # get the name for the column
+            all_data.columns = ['rdata', 'gdata']
+            # set the date become the index
+            all_data.index = date_generated
+            print(len(all_data))
+            # put the obs data into dataframe -> dataarray to group by time
+        else:
+            print("The dimension are not equal")
+
+# ----------------------- Calculation or plot ---------------------- #
+        if option == "time":
+            formatter = mdates.DateFormatter("%Y")  # formatter of the date
+            locator = mdates.YearLocator()  # where to put the labels
+            fig = plt.figure(figsize=(20, 5))
+            ax = plt.gca()  # calling the formatter for the x-axis
+            # calling the locator for the x-axis
+            ax.xaxis.set_major_formatter(formatter)
+            ax.xaxis.set_major_locator(locator)
+            all_data.reset_index().plot(
+                x='date_generated', y=['rdata', 'gdata'])
+            # reset_index so that the date column being a real column not just index
+            # fig.autofmt_xdate() # optional if you want to tilt the date labels - just try it
+            plt.tight_layout()
+            plt.show()
+            plt.savefig(Data_wd+'/image/test.jpg', format="jpg")
+        elif option == "indices":
+            # ------------------------- extreme indices ------------------------ #
+            # ref: https://www.frontiersin.org/articles/10.3389/fenvs.2022.921659/full
+            # precipitation
+            prcp = sdii = rx5 = rx1 = r99p = r95p = r50p = r20mm = r10mm = r11mm = cwd = 0
+            # temperature
+            diso = txx = tnx = txn = tnn = sud = tr20 = tn10p = tx10p = tn90p = tx90p = wsdi = csdi = gsl = dtr = 0
+        else:
+            print("Im testing")
+
+    else:
+        print("Retrying.....")
+        Continue
+
+# ------------------------- test plot here ------------------------- #
+# fig,axs=plt.subplot(subplot_kw=dict(projection=ccrs.PlateCarree()))
+# map_pro = ccrs.PlateCarree()
+# fig = plt.figure()
+# ax = plt.subplot(111, projection=map_pro)
+
+# print(time_period)
+# plt.savefig

@@ -1,0 +1,24 @@
+building file list ... done
+./
+trashbin/
+trashbin/__init__.py
+trashbin/bash_sup.py
+trashbin/my_package.py
+trashbin/nc_sup.py
+trashbin/plot_sup.py
+trashbin/ssom.py
+trashbin/trend.py
+trashbin/wrf_sup.py
+
+sent 405,083 bytes  received 180 bytes  35,240.26 bytes/sec
+total size is 187,029,750  speedup is 461.50
+sending incremental file list
+./
+
+sent 192 bytes  received 19 bytes  422.00 bytes/sec
+total size is 30,416  speedup is 144.15
+sending incremental file list
+
+sent 418 bytes  received 13 bytes  862.00 bytes/sec
+total size is 127,101  speedup is 294.90
+All Python and Bash files have been copied to /home/tamnnm/git_code while preserving the directory structure.

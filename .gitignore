@@ -1,0 +1,51 @@
+# .gitignore
+# Large data files
+*.nc
+*.hdf5
+*.h5
+*.zarr
+*.dat
+*.bin
+
+# WRF output files
+wrfout*
+wrfinput*
+wrfbdy*
+rsl.*
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+env/
+venv/
+.conda/
+.venv/
+
+# Build files
+__pycache__/
+*.pyc
+*.pyo
+*.so
+*.egg-info/
+build/
+dist/
+
+# Logs
+*.log
+logs/
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# System files
+.trash/
+temp/
+tmp/

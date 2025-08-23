@@ -1,0 +1,8 @@
+let g:netrw_dirhistmax  =10
+let g:netrw_dirhist_cnt =6
+let g:netrw_dirhist_1='/work/users/tamnnm/Data/wrf_data/gribfile/cera_synop_1900_2010'
+let g:netrw_dirhist_2='/work/users/tamnnm/wrf/WRF/test/RUN_ERA5_196411_7'
+let g:netrw_dirhist_3='/work/users/tamnnm/wrf/WRF/test/RUN_ERA5_194412'
+let g:netrw_dirhist_4='/work/users/tamnnm/wrf/WRF/test/run_wrf_mulyr.sh'
+let g:netrw_dirhist_5='/prod/projects/gemmes/tamnnm/wrf/wrf_188110/merge_output'
+let g:netrw_dirhist_6='/work/users/tamnnm/code/1.main_code/4.trop_cyc/tcdetection_code'

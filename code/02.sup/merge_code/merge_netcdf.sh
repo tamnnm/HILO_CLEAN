@@ -1,0 +1,1 @@
+/work/users/tamnnm/Data/wrf_data/gribfile/era_synop_1900_2010_fix/merge_netcdf.sh
