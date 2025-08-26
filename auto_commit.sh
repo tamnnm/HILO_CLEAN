@@ -1,40 +1,4 @@
 #!/bin/bash
-<<<<<<< HEAD
-commit_message="Automated commit"
-commit_log="/home/tamnnm/git_code/commit_log.txt"
-
-cd /home/tamnnm/git_code/
-
-if [ -f .git/index.lock ]; then
-    echo "Git index.lock file exists. Aborting."
-    exit 1
-fi
-
-# Stage all changes
-git add .
-
-# Commit the changes with the provided commit message
-git commit -m "$commit_message"
-
-# Check if there are any changes to commit
-if git diff-index --quiet HEAD --; then
-    echo "No changes to commit."
-else
-    end_time=$(date +"%Y-%m-%d %H:%M:%S")
-    # Commit the changes with the provided commit message
-    git commit -m "$commit_message"
-    # Push the changes to the remote repository
-    git push -u
-    echo "Changes have been committed and pushed with the message: $commit_message"
-    echo "$commit_message" >> "$commit_log"
-    echo "Log time: $end_time" >> "$commit_log"
-fi
-
-cd -
-
-
-
-=======
 
 # Enhanced Configuration
 REPO_DIR="/home/tamnnm/gitsync"
@@ -105,4 +69,3 @@ else
         exit 1
     fi
 fi
->>>>>>> c80f4457 (First commit)
